@@ -333,29 +333,11 @@ if (usersRes.error) throw usersRes.error;
 
   };
 
-
-  // For selected month: total reports + level distribution + recent summary
-  const fetchSelectedMonthWarnings = async (monthKey) => {
-    const from = startOfMonthManilaUtc(monthKey).toISOString();
-    const to = endOfMonthManilaUtcExclusive(monthKey).toISOString();
-
-
-    // total warnings this month
-    const totalRes = await supabase
-      .from('driver_warnings')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', from)
-      .lt('created_at', to);
-
-    if (totalRes.error) throw totalRes.error;
-    setReportsThisMonth(totalRes.count || 0);
-
-    // fetch only levels for pie + summary (minimal columns)
+// Fetch ALL-TIME alert level counts for the Pie Chart + Alert Summary
+  const fetchAllTimeWarnings = async () => {
     const levelsRes = await supabase
       .from('driver_warnings')
-      .select('level')
-      .gte('created_at', from)
-      .lt('created_at', to);
+      .select('level');
 
     if (levelsRes.error) throw levelsRes.error;
 
@@ -373,6 +355,24 @@ if (usersRes.error) throw usersRes.error;
     ]);
 
     setRecentSummary({ l1, l2, l3 });
+  };
+  // For selected month: total reports + level distribution + recent summary
+  const fetchSelectedMonthWarnings = async (monthKey) => {
+    const from = startOfMonthManilaUtc(monthKey).toISOString();
+    const to = endOfMonthManilaUtcExclusive(monthKey).toISOString();
+
+
+    // total warnings this month
+    const totalRes = await supabase
+      .from('driver_warnings')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', from)
+      .lt('created_at', to);
+
+    if (totalRes.error) throw totalRes.error;
+    setReportsThisMonth(totalRes.count || 0);
+
+    // Note: Pie chart + Alert Summary are all-time — see fetchAllTimeWarnings()
   };
 
   useEffect(() => {
@@ -415,7 +415,9 @@ if (usersRes.error) throw usersRes.error;
         await fetchTotalUsers();
         await fetchTotalDriverUsers();
         await fetchActiveUsers();
-        await fetchSelectedMonthWarnings(currentMonthKey);        if (!alive) return;
+        await fetchSelectedMonthWarnings(currentMonthKey);
+        await fetchAllTimeWarnings();
+        if (!alive) return;
       } catch (e) {
         // eslint-disable-next-line no-console
         console.log('[DashboardPage] fetch error:', e?.message || String(e));
@@ -622,7 +624,7 @@ if (usersRes.error) throw usersRes.error;
 
         {/* Recent Reports Summary */}
         <div className="p-6 border border-blue-100 shadow-lg bg-white/95 backdrop-blur-sm rounded-2xl shadow-blue-100">
-          <h2 className="mb-6 text-xl font-bold text-gray-800">Recent Alert Summary</h2>
+          <h2 className="text-xl font-bold text-gray-800">All-Time Alert Summary</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between p-4 transition-shadow duration-200 border border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-xl hover:shadow-md">
               <div className="flex items-center gap-3">
