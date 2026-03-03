@@ -365,7 +365,7 @@ export function ActiveAlertsPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="mb-2 text-3xl font-bold text-gray-800">Active Drowsiness Alerts</h1>
-          <p className="text-gray-600">All drivers currently active — real-time heartbeat monitoring</p>
+          <p className="text-gray-600">All drivers currently active — real-time alert monitoring</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 px-4 py-2 border border-red-200 shadow-md bg-gradient-to-r from-red-50 to-rose-50 rounded-xl">
@@ -546,7 +546,7 @@ export function ActiveAlertsPage() {
         <div className="p-12 text-center bg-white shadow-sm rounded-xl">
           <BellOff size={48} className="mx-auto mb-4 text-gray-400" />
           <p className="mb-2 text-xl font-semibold text-gray-600">No Active Drivers</p>
-          <p className="text-gray-500">No drivers are currently online. Drivers with an active heartbeat will appear here automatically.</p>
+          <p className="text-gray-500">No drivers are currently online. Drivers with an active heartbeat and alerts will appear here automatically.</p>
         </div>
       )}
 
