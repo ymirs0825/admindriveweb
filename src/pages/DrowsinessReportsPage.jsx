@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Calendar, Filter, AlertTriangle, Download, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { supabase } from '../utils/supabaseClient';
 
@@ -51,13 +51,7 @@ export function DrowsinessReportsPage() {
   const [dbTotalCount, setDbTotalCount] = useState(0);
   const [dbFilteredTotalCount, setDbFilteredTotalCount] = useState(0);
 
-  // ---------- DB-backed average metrics (computed from grouped cards) ----------
-  const [avgMetrics, setAvgMetrics] = useState({
-    eye: 0,   // average Eye Closure % (0..100)
-    mouth: 0, // average Mouth Ratio (raw)
-    head: 0,  // average Head Tilt (deg)
-    yawn: 0,  // average Yawn Frequency (count)
-  });
+
 
 
 
@@ -155,26 +149,7 @@ const paginatedReports = dbReports;
       return null;
     };
 
-    // Merge metrics across ALL monitor_type rows for this timestamp
-    let perclos = null; // 0..1
-    let marPeak = null;
-    let headPitch = null;
-    let yawnCount = null;
-    let handsOffSec = null;
 
-    for (const w of warningsAtSameTimestamp) {
-      const meta = w?.meta || {};
-
-      if (perclos == null) perclos = getNum(meta, 'perclos');
-      if (marPeak == null) marPeak = getNum(meta, 'mar_peak');
-      if (headPitch == null) headPitch = getNum(meta, 'head_pitch_peak_deg');
-      if (yawnCount == null) yawnCount = getNum(meta, 'yawn_count');
-
-      if (handsOffSec == null) {
-        handsOffSec = getNum(meta, 'hands_off_sec');
-        if (handsOffSec == null) handsOffSec = getNum(meta, 'handsOffSec');
-      }
-    }
 
 
     // Preserve your existing card logic: pick the highest level among the 4 rows (safest)
@@ -198,13 +173,6 @@ const paginatedReports = dbReports;
       locationText,
       monitorType: 'combined',
       snapshotUrl,
-
-      // Metrics merged from the 4 types
-      eyeClosurePercentage: perclos != null ? Math.round(perclos * 100) : null,
-      mouthAspectRatio: marPeak != null ? marPeak : null,
-      headTiltAngle: headPitch != null ? headPitch : null,
-      yawnFrequency: yawnCount != null ? yawnCount : null,
-      handsOffSec: handsOffSec != null ? handsOffSec : null,
 
       emergencyContacted: false,
     };
@@ -282,40 +250,11 @@ const paginatedReports = dbReports;
       // Optional: keep dbTotalCount aligned to cards (not raw rows)
       setDbTotalCount(grouped.length);
 
-      // Keep only cards that have at least one metric detected
-      const filteredAll = grouped.filter((r) => {
-        const hasEye = r.eyeClosurePercentage != null;
-        const hasMouth = r.mouthAspectRatio != null;
-        const hasHead = r.headTiltAngle != null;
-        const hasYawn = r.yawnFrequency != null;
-        const hasHands = r.handsOffSec != null;
-        return hasEye || hasMouth || hasHead || hasYawn || hasHands;
-      });
+      // No per-metric filtering anymore
+      const filteredAll = grouped;
 
       // Update filtered total for pagination UI
       setDbFilteredTotalCount(filteredAll.length);
-
-      // Compute averages for the "Average Metrics" chart (ignore null / not detected)
-      const avg = (arr, getter) => {
-        let sum = 0;
-        let cnt = 0;
-        for (const it of arr) {
-          const v = getter(it);
-          if (v == null) continue;
-          const n = Number(v);
-          if (!Number.isFinite(n)) continue;
-          sum += n;
-          cnt += 1;
-        }
-        return cnt ? sum / cnt : 0;
-      };
-
-      setAvgMetrics({
-        eye: avg(filteredAll, (r) => r.eyeClosurePercentage),
-        mouth: avg(filteredAll, (r) => r.mouthAspectRatio),
-        head: avg(filteredAll, (r) => r.headTiltAngle),
-        yawn: avg(filteredAll, (r) => r.yawnFrequency),
-      });
 
       // Paginate AFTER filtering so every page is full (until the last page)
       const pageItems = filteredAll.slice(fromRow, fromRow + ITEMS_PER_PAGE);
@@ -328,7 +267,6 @@ const paginatedReports = dbReports;
       setDbReports([]);
       setDbTotalCount(0);
       setDbFilteredTotalCount(0);
-      setAvgMetrics({ eye: 0, mouth: 0, head: 0, yawn: 0 });
 
     } finally {
       setReportsLoading(false);
@@ -356,16 +294,8 @@ const paginatedReports = dbReports;
 
       // Emergency calls: NOT YET (per your instruction)
       emergencyContacted: 0,
-
-      // We don't have a reliable DB source for these averages yet in Step 4
-      // (We’ll do it later when you confirm the metrics source).
-      avgEyeClosure: avgMetrics.eye,
-      avgMouthRatio: avgMetrics.mouth,
-      avgHeadTilt: avgMetrics.head,
-      avgYawnFreq: avgMetrics.yawn,
-
     };
-  }, [summaryCounts, avgMetrics]);
+  }, [summaryCounts]);
 
 
 
@@ -375,12 +305,7 @@ const paginatedReports = dbReports;
     { level: 'Level 3', count: summary.level3, color: '#EF4444' },
   ];
 
-  const metricsData = [
-    { metric: 'Eye Closure', value: Number(summary.avgEyeClosure.toFixed(1)) },
-    { metric: 'Mouth Ratio', value: Number(summary.avgMouthRatio.toFixed(2)) },
-    { metric: 'Head Tilt', value: Number(summary.avgHeadTilt.toFixed(1)) },
-    { metric: 'Yawn Freq', value: Number(summary.avgYawnFreq.toFixed(1)) },
-  ];
+
 
 
   const getLevelColor = (level) => {
@@ -396,11 +321,6 @@ const paginatedReports = dbReports;
     const headers = [
       'User Name',
       'Date & Time',
-      'Eye Closure %',
-      'Mouth Ratio',
-      'Head Tilt (°)',
-      'Yawn Frequency',
-      'Hands on Wheel',
       'Drowsiness Level',
       'Emergency Contacted'
     ];
@@ -408,15 +328,6 @@ const rows = dbReports.map(report => [
 
       report.userName,
       format(new Date(report.timestamp), 'MMM dd, yyyy HH:mm:ss'),
-      report.eyeClosurePercentage != null ? report.eyeClosurePercentage : 'Not detected',
-      report.mouthAspectRatio != null ? Number(report.mouthAspectRatio).toFixed(2) : 'Not detected',
-      report.headTiltAngle != null ? report.headTiltAngle : 'Not detected',
-      report.yawnFrequency != null ? report.yawnFrequency : 'Not detected',
-      report.handsOffSec == null
-        ? 'Not detected'
-        : (report.handsOffSec <= 0.5
-          ? 'Yes'
-          : `No (${Number(report.handsOffSec).toFixed(1)}s off)`),
       report.drowsinessLevel,
       report.emergencyContacted ? 'Yes' : 'No'
     ]);
@@ -508,7 +419,7 @@ const rows = dbReports.map(report => [
       </div>
 
       {/* Charts & Metrics */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6">
         {/* Alert Level Distribution */}
         <div className="p-6 border border-blue-100 shadow-lg bg-white/95 backdrop-blur-sm rounded-2xl shadow-blue-100">
           <h2 className="mb-6 text-xl font-bold text-gray-800">Alert Level Distribution</h2>
@@ -518,7 +429,7 @@ const rows = dbReports.map(report => [
               <XAxis dataKey="level" fontSize={12} stroke="#64748B" />
               <YAxis fontSize={12} stroke="#64748B" />
               <Tooltip contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '12px', border: '1px solid #DBEAFE', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-              <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+              <Bar dataKey="count" barSize={200} radius={[8, 8, 0, 0]}>
                 {levelDistribution.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
@@ -527,25 +438,7 @@ const rows = dbReports.map(report => [
           </ResponsiveContainer>
         </div>
 
-        {/* Average Metrics */}
-        <div className="p-6 border border-blue-100 shadow-lg bg-white/95 backdrop-blur-sm rounded-2xl shadow-blue-100">
-          <h2 className="mb-6 text-xl font-bold text-gray-800">Average Metrics</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={metricsData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#E0F2FE" />
-              <XAxis type="number" fontSize={12} stroke="#64748B" />
-              <YAxis dataKey="metric" type="category" width={100} fontSize={12} stroke="#64748B" />
-              <Tooltip contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '12px', border: '1px solid #DBEAFE', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-              <Bar dataKey="value" fill="url(#metricsGradient)" radius={[0, 8, 8, 0]} />
-              <defs>
-                <linearGradient id="metricsGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#3B82F6" />
-                  <stop offset="100%" stopColor="#60A5FA" />
-                </linearGradient>
-              </defs>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+
       </div>
 
       {/* Detailed Reports */}
@@ -592,63 +485,7 @@ const rows = dbReports.map(report => [
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getLevelColor(report.drowsinessLevel)}`}>Level {report.drowsinessLevel}</span>
               </div>
 
-              {(() => {
-                const items = [
-                  {
-                    key: 'eye',
-                    label: 'Eye Closure',
-                    value:
-                      report.eyeClosurePercentage != null
-                        ? `${report.eyeClosurePercentage}%`
-                        : 'Not detected',
-                  },
-                  {
-                    key: 'mouth',
-                    label: 'Mouth Ratio',
-                    value:
-                      report.mouthAspectRatio != null
-                        ? Number(report.mouthAspectRatio).toFixed(2)
-                        : 'Not detected',
-                  },
-                  {
-                    key: 'head',
-                    label: 'Head Tilt',
-                    value:
-                      report.headTiltAngle != null
-                        ? `${report.headTiltAngle}°`
-                        : 'Not detected',
-                  },
-                  {
-                    key: 'yawn',
-                    label: 'Yawn Frequency',
-                    value:
-                      report.yawnFrequency != null
-                        ? String(report.yawnFrequency)
-                        : 'Not detected',
-                  },
-                  {
-                    key: 'hands',
-                    label: 'Hands on Wheel',
-                    value:
-                      report.handsOffSec == null
-                        ? 'Not detected'
-                        : (report.handsOffSec <= 0.5
-                          ? 'Yes'
-                          : `No (${Number(report.handsOffSec).toFixed(1)}s off)`),
-                  },
-                ];
 
-                return (
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                    {items.map((it) => (
-                      <div key={it.key} className="p-3 text-sm border border-blue-100 rounded-lg bg-blue-50">
-                        <p className="text-gray-600">{it.label}</p>
-                        <p className="font-semibold text-gray-900">{it.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
 
               {report.emergencyContacted && (
                 <div className="flex items-center gap-2 p-2 mt-3 text-sm font-semibold text-red-600 border border-red-200 rounded-lg bg-red-50">
